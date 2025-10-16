@@ -697,6 +697,28 @@ def main():
     app.post_init = on_startup
 
     logger.info("Bot starting with long polling...")
+
+    # --- Перезапуск задач из базы при старте ---
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT user_id, name, time, days FROM tasks")
+    tasks = cur.fetchall()
+    conn.close()
+
+    for user_id, name, time_str, days_csv in tasks:
+        days = [int(d) for d in days_csv.split(",")]
+        try:
+            hour, minute = map(int, time_str.split(":"))
+            app.job_queue.run_daily(
+                lambda ctx: ctx.bot.send_message(chat_id=user_id, text=f"Напоминание: {name}! 💪"),
+                time=datetime.time(hour=hour, minute=minute, tzinfo=ZoneInfo("UTC")),
+                days=days,
+                name=f"task_{user_id}_{name}"
+            )
+            logger.info(f"🔁 Восстановлена задача '{name}' для пользователя {user_id}")
+        except Exception as e:
+            logger.error(f"Ошибка при восстановлении задачи {name}: {e}")
+
     app.run_polling()
 
 
