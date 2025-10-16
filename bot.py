@@ -690,45 +690,93 @@ from datetime import date, datetime, timedelta, time
 from zoneinfo import ZoneInfo
 
 def schedule_task_jobs(app, user_id: int, name: str, time_str: str, days_csv: str):
-    """Создаёт 3 ежедневных джоба по задаче: за 10 мин, в момент старта и через час.
-       Время считается в ЧП пользователя."""
-    tz = get_user_tz(user_id)
-    days = [int(d) for d in days_csv.split(",")]
-    h, m = map(int, time_str.split(":"))
-
-    base_local = time(hour=h, minute=m, tzinfo=tz)
-
-    def shift(t: time, delta: timedelta) -> time:
-        dt = datetime.combine(date.today(), t)
-        return (dt + delta).timetz()  # time с tzinfo
-
     jq = app.job_queue
-
     days = [(int(d) - 1) % 7 for d in map(int, days_csv.split(","))]
 
-    # ⏰ В момент начала
-    jq.run_daily(
-        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"⏰ Время выполнить задачу: {n}! 💪"),
-        time=base_local,
-        days=days,
-        name=f"task_start_{user_id}_{name}"
-    )
+    try:
+        hour, minute = map(int, time_str.split(":"))
+    except ValueError:
+        logger.error(f"Неверное время '{time_str}' для задачи {name}")
+        return
 
-    # ⚠️ За 10 минут до начала
+    tz = ZoneInfo("Europe/Prague")  # можно потом заменить на get_user_tz(user_id)
+
+    # 🔔 Напоминание за 10 минут до начала
+    reminder_time = datetime.time(
+        hour=(hour - 1) if (minute < 10) else hour,
+        minute=(minute - 10) % 60,
+        tzinfo=tz
+    )
     jq.run_daily(
-        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"⚠️ Через 10 минут начинай: {n}!"),
-        time=shift(base_local, timedelta(minutes=-10)),
+        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"🔔 Через 10 минут начнётся задача: {n}!"),
+        time=reminder_time,
         days=days,
         name=f"task_early_{user_id}_{name}"
     )
 
-    # ✅ Через 1 час после начала
+    # ⏰ Основное напоминание
     jq.run_daily(
-        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"✅ {n} закончилась! Выполнил? Напиши /done"),
-        time=shift(base_local, timedelta(hours=1)),
+        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"⏰ Время выполнить задачу: {n}! 💪"),
+        time=datetime.time(hour=hour, minute=minute, tzinfo=tz),
         days=days,
-        name=f"task_check_{user_id}_{name}"
+        name=f"task_start_{user_id}_{name}"
     )
+
+    # 🕐 Проверка через час после начала
+    followup_time = datetime.time(
+        hour=(hour + 1) % 24,
+        minute=minute,
+        tzinfo=tz
+    )
+    jq.run_daily(
+        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"❓ Ты выполнил задачу {n}?"),
+        time=followup_time,
+        days=days,
+        name=f"task_followup_{user_id}_{name}"
+    )
+
+    logger.info(f"✅ Созданы напоминания для задачи '{name}' ({user_id})")
+
+# def schedule_task_jobs(app, user_id: int, name: str, time_str: str, days_csv: str):
+#     """Создаёт 3 ежедневных джоба по задаче: за 10 мин, в момент старта и через час.
+#        Время считается в ЧП пользователя."""
+#     tz = get_user_tz(user_id)
+#     days = [int(d) for d in days_csv.split(",")]
+#     h, m = map(int, time_str.split(":"))
+#
+#     base_local = time(hour=h, minute=m, tzinfo=tz)
+#
+#     def shift(t: time, delta: timedelta) -> time:
+#         dt = datetime.combine(date.today(), t)
+#         return (dt + delta).timetz()  # time с tzinfo
+#
+#     jq = app.job_queue
+#
+#     days = [(int(d) - 1) % 7 for d in map(int, days_csv.split(","))]
+#
+#     # ⏰ В момент начала
+#     jq.run_daily(
+#         lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"⏰ Время выполнить задачу: {n}! 💪"),
+#         time=base_local,
+#         days=days,
+#         name=f"task_start_{user_id}_{name}"
+#     )
+#
+#     # ⚠️ За 10 минут до начала
+#     jq.run_daily(
+#         lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"⚠️ Через 10 минут начинай: {n}!"),
+#         time=shift(base_local, timedelta(minutes=-10)),
+#         days=days,
+#         name=f"task_early_{user_id}_{name}"
+#     )
+#
+#     # ✅ Через 1 час после начала
+#     jq.run_daily(
+#         lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"✅ {n} закончилась! Выполнил? Напиши /done"),
+#         time=shift(base_local, timedelta(hours=1)),
+#         days=days,
+#         name=f"task_check_{user_id}_{name}"
+#     )
 
 def main():
     init_db()
