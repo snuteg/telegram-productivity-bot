@@ -453,7 +453,7 @@ async def progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def leaderboard_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    today = today_for_user(update.effective_user)
+    today = today_for_user(update.effective_user.id)
     week_start = iso_week_monday(today)
 
     conn = db()
