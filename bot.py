@@ -352,29 +352,57 @@ async def mark_done_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =====================
 # Progress & Leaderboard
 # =====================
-TIMEZONE_OPTIONS = {
-    "Europe/Prague": "🇨🇿 Европа/Прага",
-    "Asia/Baku": "🇦🇿 Баку",
-    "Europe/Moscow": "🇷🇺 Москва"
-}
-
 async def settimezone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton(label, callback_data=f"settz:{tz}")]
-        for tz, label in TIMEZONE_OPTIONS.items()
-    ]
-    await update.message.reply_text(
-        "Выбери свой часовой пояс:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    timezones = {
+        "🇨🇿 Прага": "Europe/Prague",
+        "🇦🇿 Баку": "Asia/Baku",
+        "🇷🇺 Москва": "Europe/Moscow"
+    }
 
-async def settimezone_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton(label, callback_data=f"tz:{tz}")]
+        for label, tz in timezones.items()
+    ]
+    await update.message.reply_text("Выбери свой часовой пояс:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def timezone_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    tz = q.data.split(":")[1]
+    _, tz = q.data.split(":", 1)
+
     user_id = update.effective_user.id
-    set_user_tz(user_id, tz)
-    await q.edit_message_text(f"✅ Твой часовой пояс установлен: {TIMEZONE_OPTIONS[tz]}")
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("INSERT OR REPLACE INTO timezones (user_id, tz_name) VALUES (?, ?)", (user_id, tz))
+    conn.commit()
+    conn.close()
+
+    await q.edit_message_text(f"✅ Часовой пояс установлен: {tz}")
+
+# TIMEZONE_OPTIONS = {
+#     "Europe/Prague": "🇨🇿 Европа/Прага",
+#     "Asia/Baku": "🇦🇿 Баку",
+#     "Europe/Moscow": "🇷🇺 Москва"
+# }
+#
+# async def settimezone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     keyboard = [
+#         [InlineKeyboardButton(label, callback_data=f"settz:{tz}")]
+#         for tz, label in TIMEZONE_OPTIONS.items()
+#     ]
+#     await update.message.reply_text(
+#         "Выбери свой часовой пояс:",
+#         reply_markup=InlineKeyboardMarkup(keyboard)
+#     )
+#
+# async def settimezone_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     q = update.callback_query
+#     await q.answer()
+#     tz = q.data.split(":")[1]
+#     user_id = update.effective_user.id
+#     set_user_tz(user_id, tz)
+#     await q.edit_message_text(f"✅ Твой часовой пояс установлен: {TIMEZONE_OPTIONS[tz]}")
     
 async def progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
@@ -813,8 +841,10 @@ def main():
 
     app.add_handler(CommandHandler("delete", delete_task_menu))
     app.add_handler(CallbackQueryHandler(delete_task_cb, pattern=r"^delete:\d+$"))
+    # app.add_handler(CommandHandler("settimezone", settimezone))
+    # app.add_handler(CallbackQueryHandler(settimezone_cb, pattern=r"^settz:.+$"))
     app.add_handler(CommandHandler("settimezone", settimezone))
-    app.add_handler(CallbackQueryHandler(settimezone_cb, pattern=r"^settz:.+$"))
+    app.add_handler(CallbackQueryHandler(timezone_button, pattern=r"^tz:"))
 
     app.add_handler(CallbackQueryHandler(mark_done_cb, pattern=r"^done:\d+$"))
     app.add_handler(CallbackQueryHandler(lambda u, c: u.callback_query.answer(), pattern=r"^noop$"))
