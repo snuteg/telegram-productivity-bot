@@ -704,6 +704,8 @@ def schedule_task_jobs(app, user_id: int, name: str, time_str: str, days_csv: st
 
     jq = app.job_queue
 
+    days = [(int(d) - 1) % 7 for d in map(int, days_csv.split(","))]
+
     # ⏰ В момент начала
     jq.run_daily(
         lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"⏰ Время выполнить задачу: {n}! 💪"),
