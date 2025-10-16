@@ -701,7 +701,7 @@ def main():
     # --- Перезапуск задач из базы при старте ---
     conn = db()
     cur = conn.cursor()
-    cur.execute("SELECT user_id, name, time, days FROM tasks")
+    cur.execute("SELECT user_id, name, time_str, days FROM tasks")
     tasks = cur.fetchall()
     conn.close()
 
