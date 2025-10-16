@@ -258,14 +258,10 @@ async def newtask_days_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 👉 сразу создаём 3 напоминания для только что добавленной задачи
 schedule_task_jobs(context.application, u.id, name, time_str, days_csv)
 
-await q.edit_message_text(f"✅ Задача создана: {name}\nВремя: {time_str}\nДни: {days_csv}")
+    await q.edit_message_text(f"✅ Задача создана: {name}\nВремя: {time_str}\nДни: {days_csv}")
 
 # (старый общий пересчёт можно убрать, он больше не обязателен)
 # await schedule_all_user_tasks(update.get_bot(), u.id)
-
-    await q.edit_message_text(f"✅ Задача создана: {name}\nВремя: {time_str}\nДни: {days_csv}")
-    # Schedule reminder for this task today and future
-#    await schedule_all_user_tasks(update.get_bot(), u.id)
     return ConversationHandler.END
 
 
