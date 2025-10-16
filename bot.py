@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(mes
 logger = logging.getLogger(__name__)
 
 TZ = ZoneInfo("Europe/Prague")  # Your timezone
-DB_PATH = os.getenv("BOT_DB", "bot.db")
+DB_PATH = os.getenv("BOT_DB", "/data/bot.db")
 TOKEN = os.getenv("BOT_TOKEN")
 
 if not TOKEN:
