@@ -256,7 +256,7 @@ async def newtask_days_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
 
 # 👉 сразу создаём 3 напоминания для только что добавленной задачи
-schedule_task_jobs(context.application, u.id, name, time_str, days_csv)
+    schedule_task_jobs(context.application, u.id, name, time_str, days_csv)
 
     await q.edit_message_text(f"✅ Задача создана: {name}\nВремя: {time_str}\nДни: {days_csv}")
 
