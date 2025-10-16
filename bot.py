@@ -424,32 +424,65 @@ async def progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 
+# async def leaderboard_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     today = today_for_user(update.effective_user.id)
+#     week_start = iso_week_monday(today)
+#     conn = db()
+#     cur = conn.cursor()
+#     cur.execute(
+#         "SELECT user_id, points FROM leaderboard WHERE week_start=? ORDER BY points DESC LIMIT 10",
+#         (week_start.isoformat(),)
+#     )
+#     rows = cur.fetchall()
+#
+#     if not rows:
+#         conn.close()
+#         await update.message.reply_text("Пока нет очков за эту неделю. Выполняйте задачи!")
+#         return
+#
+#     lines = ["🏆 Таблица лидеров (эта неделя):"]
+#     for i, r in enumerate(rows, start=1):
+#         uid, pts = r[0], r[1]
+#         cur.execute("SELECT username FROM users WHERE user_id=?", (uid,))
+#         ur = cur.fetchone()
+#         uname = ur[0] if ur and ur[0] else str(uid)
+#         lines.append(f"{i}. @{uname} — {pts} монет")
+#
+#     conn.close()
+#     await update.message.reply_text("\n".join(lines))
+
 async def leaderboard_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    today = today_for_user(update.effective_user.id)
+    user_id = update.effective_user.id
+    today = today_for_user(update.effective_user)
     week_start = iso_week_monday(today)
+
     conn = db()
     cur = conn.cursor()
     cur.execute(
-        "SELECT user_id, points FROM leaderboard WHERE week_start=? ORDER BY points DESC LIMIT 10",
+        "SELECT user_id, points FROM leaderboard WHERE week_start=? ORDER BY points DESC",
         (week_start.isoformat(),)
     )
     rows = cur.fetchall()
+    conn.close()
 
     if not rows:
-        conn.close()
-        await update.message.reply_text("Пока нет очков за эту неделю. Выполняйте задачи!")
+        await update.message.reply_text("Пока нет очков за эту неделю. Выполняй задачи, чтобы попасть в рейтинг 💪")
         return
 
-    lines = ["🏆 Таблица лидеров (эта неделя):"]
-    for i, r in enumerate(rows, start=1):
-        uid, pts = r[0], r[1]
-        cur.execute("SELECT username FROM users WHERE user_id=?", (uid,))
-        ur = cur.fetchone()
-        uname = ur[0] if ur and ur[0] else str(uid)
-        lines.append(f"{i}. @{uname} — {pts} монет")
+    # Считаем место пользователя
+    total = len(rows)
+    rank = next((i + 1 for i, (uid, _) in enumerate(rows) if uid == user_id), None)
+    user_points = next((pts for uid, pts in rows if uid == user_id), 0)
 
-    conn.close()
-    await update.message.reply_text("\n".join(lines))
+    if rank:
+        await update.message.reply_text(
+            f"🏆 Ты на {rank}-м месте из {total} участников этой недели!\n"
+            f"💪 У тебя {user_points} очков."
+        )
+    else:
+        await update.message.reply_text(
+            "Ты ещё не попал в таблицу лидеров. Делай задачи и зарабатывай очки 💥"
+        )
 
 
 # =====================
