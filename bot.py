@@ -255,9 +255,17 @@ async def newtask_days_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
     conn.close()
 
+# 👉 сразу создаём 3 напоминания для только что добавленной задачи
+schedule_task_jobs(context.application, u.id, name, time_str, days_csv)
+
+await q.edit_message_text(f"✅ Задача создана: {name}\nВремя: {time_str}\nДни: {days_csv}")
+
+# (старый общий пересчёт можно убрать, он больше не обязателен)
+# await schedule_all_user_tasks(update.get_bot(), u.id)
+
     await q.edit_message_text(f"✅ Задача создана: {name}\nВремя: {time_str}\nДни: {days_csv}")
     # Schedule reminder for this task today and future
-    await schedule_all_user_tasks(update.get_bot(), u.id)
+#    await schedule_all_user_tasks(update.get_bot(), u.id)
     return ConversationHandler.END
 
 
@@ -649,6 +657,48 @@ async def delete_task_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     ##
 
+from datetime import date, datetime, timedelta, time
+from zoneinfo import ZoneInfo
+
+def schedule_task_jobs(app, user_id: int, name: str, time_str: str, days_csv: str):
+    """Создаёт 3 ежедневных джоба по задаче: за 10 мин, в момент старта и через час.
+       Время считается в ЧП пользователя."""
+    tz = get_user_tz(user_id)
+    days = [int(d) for d in days_csv.split(",")]
+    h, m = map(int, time_str.split(":"))
+
+    base_local = time(hour=h, minute=m, tzinfo=tz)
+
+    def shift(t: time, delta: timedelta) -> time:
+        dt = datetime.combine(date.today(), t)
+        return (dt + delta).timetz()  # time с tzinfo
+
+    jq = app.job_queue
+
+    # ⏰ В момент начала
+    jq.run_daily(
+        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"⏰ Время выполнить задачу: {n}! 💪"),
+        time=base_local,
+        days=days,
+        name=f"task_start_{user_id}_{name}"
+    )
+
+    # ⚠️ За 10 минут до начала
+    jq.run_daily(
+        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"⚠️ Через 10 минут начинай: {n}!"),
+        time=shift(base_local, timedelta(minutes=-10)),
+        days=days,
+        name=f"task_early_{user_id}_{name}"
+    )
+
+    # ✅ Через 1 час после начала
+    jq.run_daily(
+        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"✅ {n} закончилась! Выполнил? Напиши /done"),
+        time=shift(base_local, timedelta(hours=1)),
+        days=days,
+        name=f"task_check_{user_id}_{name}"
+    )
+
 def main():
     init_db()
     app = Application.builder().token(TOKEN).build()
@@ -706,16 +756,9 @@ def main():
     conn.close()
 
     for user_id, name, time_str, days_csv in tasks:
-        days = [int(d) for d in days_csv.split(",")]
         try:
-            hour, minute = map(int, time_str.split(":"))
-            app.job_queue.run_daily(
-                lambda ctx: ctx.bot.send_message(chat_id=user_id, text=f"Напоминание: {name}! 💪"),
-                time=datetime.time(hour=hour, minute=minute, tzinfo=ZoneInfo("UTC")),
-                days=days,
-                name=f"task_{user_id}_{name}"
-            )
-            logger.info(f"🔁 Восстановлена задача '{name}' для пользователя {user_id}")
+            schedule_task_jobs(app, user_id, name, time_str, days_csv)
+            logger.info(f"🔁 Восстановлены напоминания для '{name}' (user {user_id})")
         except Exception as e:
             logger.error(f"Ошибка при восстановлении задачи {name}: {e}")
 
