@@ -691,6 +691,7 @@ from zoneinfo import ZoneInfo
 
 def schedule_task_jobs(app, user_id: int, name: str, time_str: str, days_csv: str):
     jq = app.job_queue
+    # наши дни в БД: 1..7 (Пн..Вс) → PTB ждёт 0..6
     days = [(int(d) - 1) % 7 for d in map(int, days_csv.split(","))]
 
     try:
@@ -699,38 +700,45 @@ def schedule_task_jobs(app, user_id: int, name: str, time_str: str, days_csv: st
         logger.error(f"Неверное время '{time_str}' для задачи {name}")
         return
 
-    tz = ZoneInfo("Europe/Prague")  # можно потом заменить на get_user_tz(user_id)
+    # используем TZ пользователя (если у тебя есть get_user_tz)
+    try:
+        tz = get_user_tz(user_id)
+    except Exception:
+        tz = ZoneInfo("UTC")
 
-    # 🔔 Напоминание за 10 минут до начала
-    reminder_time = datetime.time(
-        hour=(hour - 1) if (minute < 10) else hour,
-        minute=(minute - 10) % 60,
-        tzinfo=tz
-    )
+    # ⏰ базовое локальное время (в TZ пользователя)
+    base_t = time(hour=hour, minute=minute, tzinfo=tz)
+
+    # 🔔 за 10 минут до
+    # аккуратно с «одолжением» часа при minute < 10
+    if minute >= 10:
+        early_t = time(hour=hour, minute=minute - 10, tzinfo=tz)
+    else:
+        early_t = time(hour=(hour - 1) % 24, minute=(minute + 60 - 10), tzinfo=tz)
+
+    # 🕐 через 1 час
+    after_t = time(hour=(hour + 1) % 24, minute=minute, tzinfo=tz)
+
+    # 1) за 10 минут
     jq.run_daily(
         lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"🔔 Через 10 минут начнётся задача: {n}!"),
-        time=reminder_time,
+        time=early_t,
         days=days,
         name=f"task_early_{user_id}_{name}"
     )
 
-    # ⏰ Основное напоминание
+    # 2) в момент начала
     jq.run_daily(
         lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"⏰ Время выполнить задачу: {n}! 💪"),
-        time=datetime.time(hour=hour, minute=minute, tzinfo=tz),
+        time=base_t,  # <-- ВАЖНО: здесь именно time(...), не datetime.time(...)
         days=days,
         name=f"task_start_{user_id}_{name}"
     )
 
-    # 🕐 Проверка через час после начала
-    followup_time = datetime.time(
-        hour=(hour + 1) % 24,
-        minute=minute,
-        tzinfo=tz
-    )
+    # 3) через час
     jq.run_daily(
-        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"❓ Ты выполнил задачу {n}?"),
-        time=followup_time,
+        lambda ctx, uid=user_id, n=name: ctx.bot.send_message(uid, f"❓ Ты выполнил задачу {n}? Напиши /done"),
+        time=after_t,
         days=days,
         name=f"task_followup_{user_id}_{name}"
     )
